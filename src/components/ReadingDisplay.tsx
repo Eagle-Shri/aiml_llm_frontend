@@ -39,11 +39,19 @@ export function ReadingDisplay({ text, onAnalysisComplete }: ReadingDisplayProps
         alert('Failed to start recording. Please check microphone permissions.');
       }
     } else {
-      const spokenText = recorder.stopRecording();
       setIsRecording(false);
       setIsProcessing(true);
 
       try {
+        const spokenText = await recorder.stopRecording();
+        console.log('Spoken text captured:', spokenText);
+
+        if (!spokenText) {
+          alert('No speech detected. Please try reading louder or check your microphone.');
+          setIsProcessing(false);
+          return;
+        }
+
         const result = await api.analyzeReading({
           originalText: text,
           spokenText: spokenText,
@@ -54,7 +62,6 @@ export function ReadingDisplay({ text, onAnalysisComplete }: ReadingDisplayProps
       } catch (error) {
         console.error('Error analyzing reading:', error);
         alert('Failed to analyze reading. Please try again.');
-      } finally {
         setIsProcessing(false);
       }
     }
@@ -121,13 +128,12 @@ export function ReadingDisplay({ text, onAnalysisComplete }: ReadingDisplayProps
         <button
           onClick={handleRecordClick}
           disabled={isProcessing}
-          className={`w-32 h-32 rounded-full flex flex-col items-center justify-center shadow-xl transform transition-all duration-300 ${
-            isRecording
+          className={`w-32 h-32 rounded-full flex flex-col items-center justify-center shadow-xl transform transition-all duration-300 ${isRecording
               ? 'bg-red-500 hover:bg-red-600 animate-pulse'
               : isProcessing
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-amber-400 hover:bg-amber-500 hover:scale-110'
-          }`}
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-amber-400 hover:bg-amber-500 hover:scale-110'
+            }`}
         >
           {isProcessing ? (
             <Loader2 className="w-16 h-16 text-white animate-spin" />

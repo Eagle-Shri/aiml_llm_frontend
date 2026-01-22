@@ -78,13 +78,14 @@ export class SpeechRecognitionRecorder {
   private recognition: any = null;
   private transcript: string = '';
   private isActive: boolean = false;
+  private resolveStop: ((transcript: string) => void) | null = null;
 
   constructor() {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       this.recognition = new SpeechRecognition();
       this.recognition.continuous = true;
-      this.recognition.interimResults = false;
+      this.recognition.interimResults = true; // Changed to true to capture partials if needed, but handled in logic
       this.recognition.lang = 'en-US';
     }
   }
@@ -98,33 +99,61 @@ export class SpeechRecognitionRecorder {
 
       this.transcript = '';
       this.isActive = true;
+      this.resolveStop = null;
 
       this.recognition.onresult = (event: any) => {
+        let interimTranscript = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           if (event.results[i].isFinal) {
             this.transcript += event.results[i][0].transcript + ' ';
+            console.log('Final chunk:', event.results[i][0].transcript);
+          } else {
+            interimTranscript += event.results[i][0].transcript;
           }
         }
+        console.log('Current transcript state:', this.transcript);
       };
 
       this.recognition.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error);
+        this.isActive = false;
+      };
+
+      this.recognition.onend = () => {
+        console.log('Recognition ended');
+        this.isActive = false;
+        if (this.resolveStop) {
+          this.resolveStop(this.transcript.trim());
+          this.resolveStop = null;
+        }
       };
 
       this.recognition.onstart = () => {
+        console.log('Recognition started');
         resolve();
       };
 
-      this.recognition.start();
+      try {
+        this.recognition.start();
+      } catch (e) {
+        // If already started, just resolve
+        console.warn('Recognition already started or error starting:', e);
+        resolve();
+      }
     });
   }
 
-  stopRecording(): string {
-    if (this.recognition && this.isActive) {
+  stopRecording(): Promise<string> {
+    return new Promise((resolve) => {
+      if (!this.recognition || !this.isActive) {
+        resolve(this.transcript.trim());
+        return;
+      }
+
+      this.resolveStop = resolve;
       this.recognition.stop();
-      this.isActive = false;
-    }
-    return this.transcript.trim();
+      // isActive will be set to false in onend
+    });
   }
 
   isRecording(): boolean {
